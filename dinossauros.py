@@ -5,6 +5,8 @@ import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
 import os
+import plotly.graph_objects as go
+from geopy.geocoders import Nominatim
 
 # Configuração da página
 st.set_page_config(
@@ -84,38 +86,43 @@ def get_dinosaur_data():
     """
     return run_query(query)
 
-# Função de processamento dos dinossauros
-def process_dinosaur_data():
+# Função que retorna apenas ID e nome dos dinossauros
+def get_dinosaur_names():
+    df = get_dinosaur_data()[["id_dinossauro", "nome_popular"]]
+    return df.to_dict(orient="records")
+
+# Função que retorna todos os dados de um dinossauro específico
+def get_dinosaur_by_id(dino_id):
     rows = get_dinosaur_data().to_dict(orient="records")
-
-    dinosaurs = {}
-
+    
+    rows = [row for row in rows if row["id_dinossauro"] == dino_id]
+    
+    if not rows:
+        return None
+    
+    dinosaur = {
+        "id": dino_id,
+        "nome_popular": rows[0]["nome_popular"],
+        "nome_cientifico": rows[0]["nome_cientifico"],
+        "significado_nome": rows[0]["significado_nome"],
+        "altura_media_m": rows[0]["altura_media_m"],
+        "comprimento_medio_m": rows[0]["comprimento_medio_m"],
+        "peso_medio_kg": rows[0]["peso_medio_kg"],
+        "imagem": rows[0]["imagem_dinossauro"],
+        "nome_dieta": rows[0]["nome_dieta"],
+        "nome_periodo": rows[0]["nome_periodo"],
+        "ma_inicio": rows[0]["ma_inicio"],
+        "ma_fim": rows[0]["ma_fim"],
+        "clima": rows[0]["clima"],
+        "fossil": []
+    }
+    
+    # Adiciona fósseis e ossos
     for row in rows:
-        dino_id = row["id_dinossauro"]
-
-        if dino_id not in dinosaurs:
-            dinosaurs[dino_id] = {
-                "id": dino_id,
-                "nome_popular": row["nome_popular"],
-                "nome_cientifico": row["nome_cientifico"],
-                "significado_nome": row["significado_nome"],
-                "altura_media_m": row["altura_media_m"],
-                "comprimento_medio_m": row["comprimento_medio_m"],
-                "peso_medio_kg": row["peso_medio_kg"],
-                "imagem": row["imagem_dinossauro"],
-                "nome_dieta": row["nome_dieta"],
-                "nome_periodo": row["nome_periodo"],
-                "ma_inicio": row["ma_inicio"],
-                "ma_fim": row["ma_fim"],
-                "clima": row["clima"],
-                "fossil": []
-            }
-
-        # Adiciona fóssil se existir
         if row["codigo_fossil"]:
-            fossil_list = dinosaurs[dino_id]["fossil"]
+            fossil_list = dinosaur["fossil"]
             fossil = next((f for f in fossil_list if f["codigo"] == row["codigo_fossil"]), None)
-
+            
             if not fossil:
                 fossil = {
                     "codigo": row["codigo_fossil"],
@@ -134,43 +141,152 @@ def process_dinosaur_data():
                     "ossos": []
                 }
                 fossil_list.append(fossil)
-
+            
             if row["parte_osso"] and row["parte_osso"] not in fossil["ossos"]:
                 fossil["ossos"].append(row["parte_osso"])
-
-    dino_list = [dinosaurs[key] for key in sorted(dinosaurs.keys())]
-
-    return dino_list
+    
+    return dinosaur
 
 def create_dinosaur_selector():
     st.sidebar.header("Seleção de Dinossauro")
-
-    dino_list = process_dinosaur_data()
-
-    if not dino_list or len(dino_list) == 0:
-        st.sidebar.warning("Nenhum dinossauro encontrado no banco de dados.")
+    dinos = get_dinosaur_names()
+    
+    if not dinos:
+        st.sidebar.warning("Nenhum dinossauro encontrado.")
         return None
 
-    dino_dict = {d["nome_popular"]: d["id"] for d in dino_list}
+    dino_dict = {d["nome_popular"]: d["id_dinossauro"] for d in dinos}
 
-    nomes = list(dino_dict.keys())
+    sorted_names = sorted(dino_dict.keys())
 
-    selected_name = st.sidebar.selectbox(
-        "Selecione um dinossauro",
-        options=nomes,
-        index=0 if nomes else None
-    )
-
+    selected_name = st.sidebar.selectbox("Selecione um dinossauro", sorted_names)
+    
     return dino_dict.get(selected_name)
 
-
+# Função para gráfico de Peso x Maior Peso Médio conhecido
+def plot_peso_comparativo(dino):
+    # Supondo que o maior peso médio de um dinossauro seja 80000 kg (exemplo)
+    maior_peso = 80000
+    df = pd.DataFrame({
+        "Peso (kg)": [dino["peso_medio_kg"], maior_peso],
+        "Categoria": [dino["nome_popular"], "Maior Peso Já Registrado"]
+    })
+    fig = px.bar(
+        df,
+        x="Categoria",
+        y="Peso (kg)",
+        color="Categoria",
+        title="Peso Comparativo"
+    )
+    fig.update_layout(showlegend=False, height=300)
+    return fig
+    
 def main():
+    # Seleção de dinossauro
     dinosaur_id = create_dinosaur_selector()
-
     if not dinosaur_id:
         st.stop()
+    dinosaur = get_dinosaur_by_id(dinosaur_id)
+    
+    # Detalhes do dinossauro selecionado
+    col1, col2, col3 = st.columns(3)
 
-    st.success(f"Você selecionou o dinossauro de ID: {dinosaur_id}")
+    with col1:
+        st.image(dinosaur["imagem"], width=300, caption=dinosaur["nome_popular"])
+    with col2:
+        st.header(f"{dinosaur['nome_popular']}")
+        st.subheader(f"*{dinosaur['nome_cientifico']}*")
+        st.markdown(f"**Significado do Nome:** {dinosaur['significado_nome']}")
+        st.markdown(f"**Altura Média:** {dinosaur['altura_media_m']} m")
+        st.markdown(f"**Comprimento Médio:** {dinosaur['comprimento_medio_m']} m")
+        st.markdown(f"**Peso Médio:** {dinosaur['peso_medio_kg']} kg")
+    with col3:
+        if(dinosaur["nome_dieta"] == "Carnívoro"):
+            st.markdown(f"**🥩{dinosaur['nome_dieta']}**")
+        elif(dinosaur["nome_dieta"] == "Herbívoro"):
+            st.markdown(f"**🥬{dinosaur['nome_dieta']}**")
+        else:
+            st.markdown(f"**🍽️{dinosaur['nome_dieta']}**")
+        st.plotly_chart(plot_peso_comparativo(dinosaur), use_container_width=True)
+    
+    # Criar abas
+    tab1, tab2, tab3 = st.tabs([
+        "Período Geológico", 
+        "Fósseis e Descobertas",
+        "Localização de Descoberta"])
+    
+    with tab1:
+        st.subheader(f"**{dinosaur['nome_periodo']}**")
+        st.markdown(f"**Início:** {dinosaur['ma_inicio']} milhões de anos atrás")
+        st.markdown(f"**Fim:** {dinosaur['ma_fim']} milhões de anos atrás")
+        st.markdown(f"**Clima:** {dinosaur['clima']}")
+
+    with tab2:
+        if not dinosaur["fossil"]:
+            st.info("Nenhum fóssil encontrado para este dinossauro.")
+        else:
+            for fossil in dinosaur["fossil"]:
+                # Cria um expander para cada fóssil
+                with st.expander(f"Fóssil: {fossil['codigo']}"):
+                    st.markdown(f"**Data de Descoberta:** {fossil['data_descoberta']}")
+                    st.markdown(f"**Descobridor:** {fossil['nome_descobridor']}")
+                    
+                    # Local de descoberta
+                    local = fossil["local_descoberta"]
+                    st.markdown(f"**Local de Descoberta:** {local['cidade']}, {local['estado']}, {local['pais']}")
+                    
+                    # Museu
+                    museu = fossil["museu"]
+                    st.markdown(f"**Museu:** {museu['nome']} ({museu['cidade']}, {museu['pais']})")
+                    
+                    # Ossos encontrados
+                    if fossil["ossos"]:
+                        st.markdown("**Ossos encontrados:**")
+                        for osso in fossil["ossos"]:
+                            st.markdown(f"- {osso}")
+                    else:
+                        st.markdown("Nenhum osso registrado para este fóssil.")
+    
+    with tab3:
+
+        if not dinosaur["fossil"]:
+            st.info("Nenhum fóssil encontrado para este dinossauro.")
+        else:
+            fig = go.Figure()
+            geolocator = Nominatim(user_agent="dino_app")
+
+            for fossil in dinosaur["fossil"]:
+                local = fossil["local_descoberta"]
+                endereco = f"{local['cidade']}, {local['estado']}, {local['pais']}"
+
+                try:
+                    location = geolocator.geocode(endereco)
+                    if location:
+                        lat, lon = location.latitude, location.longitude
+                        fig.add_trace(go.Scattergeo(
+                            lat=[lat],
+                            lon=[lon],
+                            text=[f"Fóssil {fossil['codigo']}"],
+                            mode='markers+text',
+                            marker=dict(size=10, color='red'),
+                            textfont=dict(color="black"),
+                            textposition="top center"
+                        ))
+                    else:
+                        st.warning(f"Não foi possível localizar o endereço do fóssil {fossil['codigo']}.")
+                except:
+                    st.warning(f"Erro ao geocodificar o fóssil {fossil['codigo']}.")
+
+            fig.update_geos(
+                projection_type="orthographic",
+                showcountries=True,
+                showland=True,
+                landcolor="rgb(243, 243, 243)",
+                oceancolor="rgb(204, 224, 255)",
+            )
+
+            fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
+            st.plotly_chart(fig)
 
     
 if __name__ == "__main__":
