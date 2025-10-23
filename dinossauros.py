@@ -202,11 +202,11 @@ def main():
         st.markdown(f"**Peso Médio:** {dinosaur['peso_medio_kg']} kg")
     with col3:
         if(dinosaur["nome_dieta"] == "Carnívoro"):
-            st.markdown(f"**🥩{dinosaur['nome_dieta']}**")
+            st.header(f"**🥩{dinosaur['nome_dieta']}**")
         elif(dinosaur["nome_dieta"] == "Herbívoro"):
-            st.markdown(f"**🥬{dinosaur['nome_dieta']}**")
+            st.header(f"**🥬{dinosaur['nome_dieta']}**")
         else:
-            st.markdown(f"**🍽️{dinosaur['nome_dieta']}**")
+            st.header(f"**🍽️{dinosaur['nome_dieta']}**")
         st.plotly_chart(plot_peso_comparativo(dinosaur), use_container_width=True)
     
     # Criar abas
